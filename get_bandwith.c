@@ -4,9 +4,12 @@
 #define MAX_LINE_LENGTH 256
 #define MAX_TEMP_FILE_PATH_LENGTH 20
 
+#define TMPF "/tmp/tx_packets3.tmp"
+// #define PROC "/tmp/proc_net_dev"
+#define PROC "/proc/net/dev"
+
 char *get_temp_file_path() {
-  static char temp_file_path[MAX_TEMP_FILE_PATH_LENGTH] =
-      "/tmp/tx_packets2.tmp";
+  static char temp_file_path[MAX_TEMP_FILE_PATH_LENGTH] = TMPF;
   return temp_file_path;
 }
 
@@ -20,26 +23,29 @@ unsigned long get_tx_packets() {
   for (int i = 0; i < num_devices; i++) {
     const char *device_name = devices[i];
     unsigned long tx_packets = 0;
+    unsigned long rx_packets = 0;
     FILE *fp;
 
-    fp = fopen("/proc/net/dev", "r");
+    fp = fopen(PROC, "r");
     if (fp == NULL) {
-      fprintf(stderr, "Error: could not open /proc/net/dev\n");
+      fprintf(stderr, "Error: could not open %s\n", PROC);
       return 0;
     }
 
     while (fgets(line, MAX_LINE_LENGTH, fp) != NULL) {
       if (strstr(line, device_name) != NULL) {
         sscanf(line + strcspn(line, ":") + 1,
-               "%lu %*u %*u %*u %*u %*u %*u %*u %*u", &tx_packets);
+               "%*lu %lu %*lu %*lu %*lu %*lu %*lu %*lu %*lu %lu", &rx_packets,
+               &tx_packets);
+        total_tx_packets += tx_packets + tx_packets;
         break;
       }
     }
 
     fclose(fp);
-    total_tx_packets += tx_packets;
   }
 
+  // printf("total_tx_packets=%lu", total_tx_packets);
   return total_tx_packets;
 }
 
@@ -75,13 +81,13 @@ unsigned long update_tx_packets(unsigned long tx_packets) {
 }
 
 int main() {
-  unsigned long tx_packets;
+  unsigned long packets;
 
-  tx_packets = get_tx_packets();
+  packets = get_tx_packets();
 
   // unsigned long diff_packet = update_tx_packets(tx_packets);
   // printf("%4lu kb", diff_packet / 1024);
-  unsigned long diff_packet = update_tx_packets(tx_packets) / 1024;
+  unsigned long diff_packet = update_tx_packets(packets);
   char s[5];
   snprintf(s, sizeof(s), "%4lu", diff_packet);
   printf("%4s kb\n", s);
