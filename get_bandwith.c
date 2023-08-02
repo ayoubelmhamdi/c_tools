@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define MAX_LINE_LENGTH 256
@@ -11,6 +12,14 @@
 char *get_temp_file_path() {
   static char temp_file_path[MAX_TEMP_FILE_PATH_LENGTH] = TMPF;
   return temp_file_path;
+}
+
+int is_device_name(const char *line) {
+  // The line starts with "wl" or "eth", return true
+  if (strncmp(line, "wl", 2) == 0 || strncmp(line, "eth", 3) == 0) {
+    return 1;
+  }
+  return 0;
 }
 
 unsigned long get_tx_packets() {
