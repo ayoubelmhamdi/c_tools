@@ -25,38 +25,37 @@ int is_device_name(const char *line) {
 unsigned long get_tx_packets() {
   char line[MAX_LINE_LENGTH];
 
-  const char *devices[] = {"eth0", "wlan0", "lo", "wlp3s0"};
-  const int num_devices = sizeof(devices) / sizeof(devices[0]);
-
   unsigned long total_tx_packets = 0;
-  for (int i = 0; i < num_devices; i++) {
-    const char *device_name = devices[i];
-    unsigned long tx_packets = 0;
-    unsigned long rx_packets = 0;
-    FILE *fp;
+  FILE *fp;
+  int line_count = 0;
 
-    fp = fopen(PROC, "r");
-    if (fp == NULL) {
-      fprintf(stderr, "Error: could not open %s\n", PROC);
-      return 0;
-    }
-
-    while (fgets(line, MAX_LINE_LENGTH, fp) != NULL) {
-      if (strstr(line, device_name) != NULL) {
-        sscanf(line + strcspn(line, ":") + 1,
-               "%*lu %lu %*lu %*lu %*lu %*lu %*lu %*lu %*lu %lu", &rx_packets,
-               &tx_packets);
-        total_tx_packets += tx_packets + tx_packets;
-        break;
-      }
-    }
-
-    fclose(fp);
+  fp = fopen(PROC, "r");
+  if (fp == NULL) {
+    fprintf(stderr, "Error: could not open %s\n", PROC);
+    return 0;
   }
+
+  while (fgets(line, MAX_LINE_LENGTH, fp) != NULL) {
+    unsigned long tx_packets = 0;
+    // Skip the first two lines
+    if (line_count < 2) {
+      line_count++;
+      continue;
+    }
+    if (is_device_name(line)) {
+      sscanf(line + strcspn(line, ":") + 1,
+             "%*lu %*lu %*lu %*lu %*lu %*lu %*lu %*lu %*lu %lu", &tx_packets);
+      total_tx_packets += tx_packets;
+    }
+  }
+
+  fclose(fp);
 
   // printf("total_tx_packets=%lu", total_tx_packets);
   return total_tx_packets;
 }
+
+// **************
 
 unsigned long update_tx_packets(unsigned long tx_packets) {
   FILE *fp;
@@ -84,9 +83,34 @@ unsigned long update_tx_packets(unsigned long tx_packets) {
   fflush(fp);
   fclose(fp);
 
-  // printf("Transmitted packets: %lu (diff=%lu)\n", tx_packets,
-  // diff_tx_packets);
+  if (1 < diff_tx_packets && diff_tx_packets < 21) {
+    diff_tx_packets = 0;
+  }
   return diff_tx_packets;
+}
+
+int check_ping_status() {
+  FILE *fp;
+  char value[10];
+
+  fp = fopen("/tmp/ping.time", "r");
+  if (fp == NULL) {
+    fprintf(stderr, "Error: cannot open file /tmp/ping.time\n");
+    exit(1);
+  }
+
+  if (fgets(value, sizeof(value), fp) == NULL) {
+    printf("Error: cannot read from file /tmp/ping.time\n");
+    exit(1);
+  }
+
+  fclose(fp);
+
+  if (strcmp(value, "1\n") == 0) {
+    return 1;
+  } else {
+    return 0;
+  }
 }
 
 int main() {
@@ -94,12 +118,20 @@ int main() {
 
   packets = get_tx_packets();
 
-  // unsigned long diff_packet = update_tx_packets(tx_packets);
-  // printf("%4lu kb", diff_packet / 1024);
   unsigned long diff_packet = update_tx_packets(packets);
   char s[5];
   snprintf(s, sizeof(s), "%4lu", diff_packet);
-  printf("%4s kb\n", s);
+  // printf("%4s kb\n", s);
+
+  //
+  char state[15] = "Idle";
+
+  int ping_status = check_ping_status();
+
+  if (ping_status) {
+    strcpy(state, "Good");
+  }
+  printf("{\"state\":\"%s\", \"text\": \"%s kb\"}", state, s);
 
   return 0;
 }
