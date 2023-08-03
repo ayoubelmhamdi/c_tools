@@ -9,6 +9,9 @@
 // #define PROC "/tmp/proc_net_dev"
 #define PROC "/proc/net/dev"
 
+#define CONNECTED 1
+#define DISCONNECTED 0
+
 char *get_temp_file_path() {
   static char temp_file_path[MAX_TEMP_FILE_PATH_LENGTH] = TMPF;
   return temp_file_path;
@@ -76,7 +79,10 @@ unsigned long update_tx_packets(unsigned long tx_packets) {
     old_tx_packets = strtoul(line, NULL, 10);
   }
 
-  unsigned long diff_tx_packets = tx_packets - old_tx_packets;
+  unsigned long diff_tx_packets = 0;
+  if (tx_packets - old_tx_packets > 21) {
+    diff_tx_packets = tx_packets - old_tx_packets;
+  }
 
   rewind(fp);
   fprintf(fp, "%lu", tx_packets);
@@ -86,6 +92,7 @@ unsigned long update_tx_packets(unsigned long tx_packets) {
   if (1 < diff_tx_packets && diff_tx_packets < 21) {
     diff_tx_packets = 0;
   }
+
   return diff_tx_packets;
 }
 
@@ -96,21 +103,20 @@ int check_ping_status() {
   fp = fopen("/tmp/ping.time", "r");
   if (fp == NULL) {
     fprintf(stderr, "Error: cannot open file /tmp/ping.time\n");
-    exit(1);
+    return DISCONNECTED;
   }
 
   if (fgets(value, sizeof(value), fp) == NULL) {
-    printf("Error: cannot read from file /tmp/ping.time\n");
-    exit(1);
+    fprintf(stderr, "Error: cannot read from file /tmp/ping.time\n");
+    fclose(fp);
+    return DISCONNECTED;
   }
 
   fclose(fp);
 
-  if (strcmp(value, "1\n") == 0) {
-    return 1;
-  } else {
-    return 0;
-  }
+  if (strcmp(value, "1\n") == 0)
+    return CONNECTED;
+  return DISCONNECTED;
 }
 
 int main() {
