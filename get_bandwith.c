@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #define MAX_LINE_LENGTH 256
 #define MAX_TEMP_FILE_PATH_LENGTH 20
@@ -12,14 +13,20 @@
 #define CONNECTED 1
 #define DISCONNECTED 0
 
+char *ltrim(char *s)
+{
+    while(isspace(*s)) s++;
+    return s;
+}
+
 char *get_temp_file_path() {
   static char temp_file_path[MAX_TEMP_FILE_PATH_LENGTH] = TMPF;
   return temp_file_path;
 }
 
-int is_device_name(const char *line) {
+int is_device_name(char *line) {
   // The line starts with "wl" or "eth", return true
-  if (strncmp(line, "wl", 2) == 0 || strncmp(line, "eth", 3) == 0) {
+  if (strncmp(ltrim(line), "wl", 2) == 0 || strncmp(line, "eth", 3) == 0) {
     return 1;
   }
   return 0;
@@ -38,26 +45,25 @@ unsigned long get_tx_packets() {
     return 0;
   }
 
-  while (fgets(line, MAX_LINE_LENGTH, fp) != NULL) {
+  while (fgets(line, sizeof(line), fp) != NULL) {
     unsigned long tx_packets = 0;
+    unsigned long rx_packets = 0;
     // Skip the first two lines
     if (line_count < 2) {
       line_count++;
       continue;
     }
     if (is_device_name(line)) {
-      sscanf(line + strcspn(line, ":") + 1,
-             "%*lu %*lu %*lu %*lu %*lu %*lu %*lu %*lu %*lu %lu", &tx_packets);
-      total_tx_packets += tx_packets;
+      if (sscanf(line, "%*s %*lu %lu %*lu %*lu %*lu %*lu %*lu %*lu %lu", &rx_packets, &tx_packets) == 2) {
+        total_tx_packets += rx_packets;
+        // total_tx_packets += tx_packets + rx_packets;
+      }
     }
   }
-
   fclose(fp);
-
   // printf("total_tx_packets=%lu", total_tx_packets);
   return total_tx_packets;
 }
-
 // **************
 
 unsigned long update_tx_packets(unsigned long tx_packets) {
