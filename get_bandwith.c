@@ -1,7 +1,8 @@
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
+#include <unistd.h>
 
 #define MAX_LINE_LENGTH 256
 #define MAX_TEMP_FILE_PATH_LENGTH 20
@@ -13,93 +14,60 @@
 #define CONNECTED 1
 #define DISCONNECTED 0
 
-char *ltrim(char *s)
-{
-    while(isspace(*s)) s++;
+
+int check_ping_status();
+char *get_temp_file_path();
+int is_device_name(char *line);
+unsigned long get_tx_packets();
+void write_string_to_file(const char *str);
+
+char *ltrim(char *s) {
+    while (isspace(*s))
+        s++;
     return s;
 }
 
 char *get_temp_file_path() {
-  static char temp_file_path[MAX_TEMP_FILE_PATH_LENGTH] = TMPF;
-  return temp_file_path;
+    static char temp_file_path[MAX_TEMP_FILE_PATH_LENGTH] = TMPF;
+    return temp_file_path;
 }
 
 int is_device_name(char *line) {
-  // The line starts with "wl" or "eth", return true
-  if (strncmp(ltrim(line), "wl", 2) == 0 || strncmp(line, "eth", 3) == 0) {
-    return 1;
-  }
-  return 0;
+    // The line starts with "wl" or "eth", return true
+    if (strncmp(ltrim(line), "wl", 2) == 0 || strncmp(line, "seth", 3) == 0) return 1;
+    return 0;
 }
 
 unsigned long get_tx_packets() {
-  char line[MAX_LINE_LENGTH];
-
-  unsigned long total_tx_packets = 0;
-  FILE *fp;
-  int line_count = 0;
-
-  fp = fopen(PROC, "r");
-  if (fp == NULL) {
-    fprintf(stderr, "Error: could not open %s\n", PROC);
-    return 0;
-  }
-
-  while (fgets(line, sizeof(line), fp) != NULL) {
-    unsigned long tx_packets = 0;
-    unsigned long rx_packets = 0;
-    // Skip the first two lines
-    if (line_count < 2) {
-      line_count++;
-      continue;
-    }
-    if (is_device_name(line)) {
-      if (sscanf(line, "%*s %*lu %lu %*lu %*lu %*lu %*lu %*lu %*lu %lu", &rx_packets, &tx_packets) == 2) {
-        total_tx_packets += rx_packets;
-        // total_tx_packets += tx_packets + rx_packets;
-      }
-    }
-  }
-  fclose(fp);
-  // printf("total_tx_packets=%lu", total_tx_packets);
-  return total_tx_packets;
-}
-// **************
-
-unsigned long update_tx_packets(unsigned long tx_packets) {
-  FILE *fp;
-  unsigned long old_tx_packets = 0;
-
-  char *temp_file_path = get_temp_file_path();
-
-  fp = fopen(temp_file_path, "r+");
-  if (fp == NULL) {
-    fp = fopen(temp_file_path, "w+");
-    if (fp == NULL) {
-      fprintf(stderr, "Error: could not create temporary file\n");
-      return 0;
-    }
-  } else {
     char line[MAX_LINE_LENGTH];
-    fgets(line, MAX_LINE_LENGTH, fp);
-    old_tx_packets = strtoul(line, NULL, 10);
-  }
 
-  unsigned long diff_tx_packets = 0;
-  if (tx_packets - old_tx_packets > 21) {
-    diff_tx_packets = tx_packets - old_tx_packets;
-  }
+    unsigned long total_tx_packets = 0;
+    FILE *fp;
+    int line_count = 0;
 
-  rewind(fp);
-  fprintf(fp, "%lu", tx_packets);
-  fflush(fp);
-  fclose(fp);
+    fp = fopen(PROC, "r");
+    if (fp == NULL) {
+        fprintf(stderr, "Error: could not open %s\n", PROC);
+        return 0;
+    }
 
-  if (1 < diff_tx_packets && diff_tx_packets < 21) {
-    diff_tx_packets = 0;
-  }
-
-  return diff_tx_packets;
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        unsigned long tx_packets = 0;
+        unsigned long rx_packets = 0;
+        // Skip the first two lines
+        if (line_count < 2) {
+            line_count++;
+            continue;
+        }
+        if (is_device_name(line)) {
+            if (sscanf(line, "%*s %lu %*lu %*lu %*lu %*lu %*lu %*lu %*lu %lu", &rx_packets, &tx_packets) == 2) {
+                total_tx_packets += rx_packets;
+                // total_tx_packets += tx_packets + rx_packets;
+            }
+        }
+    }
+    fclose(fp);
+    return total_tx_packets;
 }
 
 int check_ping_status() {
@@ -125,25 +93,38 @@ int check_ping_status() {
   return DISCONNECTED;
 }
 
+void write_string_to_file(const char *str) {
+    FILE *file = fopen(TMPF, "w+");
+    if (file != NULL) {
+        fputs(str, file);
+        fclose(file);
+    } else {
+        printf("Error opening file!\n");
+    }
+}
+
 int main() {
-  unsigned long packets;
+    char state[15] = "Idle";
+    int ping_status = 0;
+    unsigned long delta = 0, new =0, old = 0;
+    char output[200];
 
-  packets = get_tx_packets();
+    while (1) {
+        new = get_tx_packets();
+        ping_status = check_ping_status();
 
-  unsigned long diff_packet = update_tx_packets(packets);
-  char s[5];
-  snprintf(s, sizeof(s), "%4lu", diff_packet);
-  // printf("%4s kb\n", s);
+        delta = (new - old)/1024;
 
-  //
-  char state[15] = "Idle";
+        if (ping_status) {
+            if (delta > 5) sprintf(output, "%lu kb  |\n", delta);
+            else sprintf(output, " |\n");
+        } else sprintf(output, " |\n");
 
-  int ping_status = check_ping_status();
+        write_string_to_file(output);
 
-  if (ping_status) {
-    strcpy(state, "Good");
-  }
-  printf("{\"state\":\"%s\", \"text\": \"%s kb\"}", state, s);
+        old = new;
+        sleep(1);
+    }
 
-  return 0;
+    return 0;
 }
