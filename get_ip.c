@@ -11,8 +11,9 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#define true 1
-#define false 0
+#define CONNECTED 1
+#define DISCONNECTED 0
+
 
 void dev_ip(char name_wifi[], char s[]) {
   int fd;
@@ -43,27 +44,27 @@ void ip_from_dev(char s[]) {
   }
 }
 
-int check_internet_connection() {
-  int sock = socket(AF_INET, SOCK_STREAM, 0);
-  struct sockaddr_in server;
-  struct hostent *host;
-  host = gethostbyname("www.google.com");
-  if (host == NULL) {
-    // printf("Error resolving hostname\n");
-    return 0;
-  }
-  server.sin_addr = *((struct in_addr *)host->h_addr_list[0]);
-  server.sin_family = AF_INET;
-  server.sin_port = htons(80);
+int check_ping_status() {
+    FILE *fp;
+    char value[10];
 
-  int connected = connect(sock, (struct sockaddr *)&server, sizeof(server));
-  close(sock);
+    fp = fopen("/tmp/ping.time", "r");
+    if (fp == NULL) {
+        fprintf(stderr, "Error: cannot open file /tmp/ping.time\n");
+        return DISCONNECTED;
+    }
 
-  if (connected == 0) {
-    return 1;
-  } else {
-    return 0;
-  }
+    if (fgets(value, sizeof(value), fp) == NULL) {
+        fprintf(stderr, "Error: cannot read from file /tmp/ping.time\n");
+        fclose(fp);
+        return DISCONNECTED;
+    }
+
+    fclose(fp);
+
+    if (strcmp(value, "1\n") == 0)
+        return CONNECTED;
+    return DISCONNECTED;
 }
 
 int main(void) {
@@ -71,7 +72,7 @@ int main(void) {
   char s[15];
   char state[15] = "Idle";
 
-  int connection_status = check_internet_connection();
+  int connection_status = check_ping_status();
 
   if (connection_status) {
     strcpy(state, "Good");
