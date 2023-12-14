@@ -34,7 +34,7 @@ char *get_temp_file_path() {
 
 int is_device_name(char *line) {
     // The line starts with "wl" or "eth", return true
-    if (strncmp(ltrim(line), "wl", 2) == 0 || strncmp(line, "seth", 3) == 0) return 1;
+    if (strncmp(ltrim(line), "wl", 2) == 0 || strncmp(line, "eth", 3) || strncmp(line, "usb", 3) == 0) return 1;
     return 0;
 }
 
@@ -71,26 +71,26 @@ unsigned long get_tx_packets() {
 }
 
 int check_ping_status() {
-  FILE *fp;
-  char value[10];
+    FILE *fp;
+    char value[10];
 
-  fp = fopen("/tmp/ping.time", "r");
-  if (fp == NULL) {
-    fprintf(stderr, "Error: cannot open file /tmp/ping.time\n");
-    return DISCONNECTED;
-  }
+    // TODO: check if ping-status pid exists
+    fp = fopen("/tmp/ping.time", "r");
+    if (fp == NULL) {
+        fprintf(stderr, "Error: cannot open file /tmp/ping.time\n");
+        return DISCONNECTED;
+    }
 
-  if (fgets(value, sizeof(value), fp) == NULL) {
-    fprintf(stderr, "Error: cannot read from file /tmp/ping.time\n");
+    if (fgets(value, sizeof(value), fp) == NULL) {
+        fprintf(stderr, "Error: cannot read from file /tmp/ping.time\n");
+        fclose(fp);
+        return DISCONNECTED;
+    }
+
     fclose(fp);
-    return DISCONNECTED;
-  }
 
-  fclose(fp);
-
-  if (strcmp(value, "1\n") == 0)
-    return CONNECTED;
-  return DISCONNECTED;
+    if (strncmp(value, "1", 1) == 0)    return CONNECTED;
+    else                                return DISCONNECTED;
 }
 
 void write_string_to_file(const char *str) {
@@ -118,7 +118,7 @@ int main() {
         if (ping_status) {
             if (delta > 5) sprintf(output, "%lu kb  |\n", delta);
             else sprintf(output, " |\n");
-        } else sprintf(output, " |\n");
+        } else sprintf(output, "  |\n");
 
         write_string_to_file(output);
 
@@ -126,5 +126,7 @@ int main() {
         sleep(1);
     }
 
+    // i3status-rs
+    // printf("{\"state\":\"%s\", \"text\": \"%s kb\"}", state, bandwith);
     return 0;
 }
